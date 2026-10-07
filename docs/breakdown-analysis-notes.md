@@ -104,6 +104,37 @@ Definitions:
 - Many high-resource languages (`tel`, `rus`, `por`, `mal`, `ben`, ...) have
   `error_rate` 0 and `all_correct_share` 1.0.
 
+### Effect of macrolanguage handling on the `commonlid_nano` ranking
+
+Macro F1 (gold-only) recomputed from the predictions. The exact-match column
+reproduces the published leaderboard. Two variants:
+
+- *Collapsed*: gold and prediction both mapped to their macrolanguage; gold
+  classes merge from 101 to 83.
+- *Lenient*: the 101 gold languages are kept, and a prediction is correct if it
+  is in the same macrolanguage as the gold label. Siblings count too
+  (`arz` gold, `arb` predicted).
+
+| model | exact | collapsed | lenient | rank exact → collapsed → lenient |
+|---|---|---|---|---|
+| GPT-5 | 0.725 | 0.867 | 0.884 | 1 → 1 → 2 |
+| py3langid | 0.724 | 0.857 | 0.876 | 2 → 3 → 3 |
+| GlotLID | 0.702 | 0.866 | 0.885 | 3 → 2 → 1 |
+| GPT-5-mini | 0.665 | 0.833 | 0.848 | 4 → 4 → 4 |
+| GPT-4o | 0.659 | 0.821 | 0.841 | 5 → 5 → 5 |
+
+- The top 5 stay the same; only the top three reorder. GlotLID gains the
+  most, going from 0.023 behind GPT-5 to 0.002 ahead under lenient matching.
+- All models gain about 0.14–0.18 macro F1, which is much more than the gaps
+  between them.
+- Elsewhere there are only adjacent swaps: commonlingua and
+  GoogleTranslate-v3 (6/7, lenient), cld2 and fasttext (10/11).
+- The top-three gaps of 0.001–0.002 are likely within noise: 1,507 samples,
+  as few as 5 per language.
+- Method: per model, `compute_per_language_metrics` + `macro_average` on
+  `load_predictions(...)`, with `to_macrolanguage` applied to gold and/or
+  pred. Not yet part of the CLI (see next steps).
+
 ## Reproduce
 
 ```bash
@@ -127,7 +158,10 @@ commonlid breakdown --dataset commonlid_nano -k 5 --sort-by agreement --order as
    `--model` to compare models that do support them.
 3. **Decide on macrolanguages.** Decide whether the official metrics should
    also count macrolanguage matches, or report them as a separate view. The
-   breakdown shows how much they affect the numbers.
+   breakdown shows how much they affect the numbers. On `commonlid_nano` the
+   top 5 are stable but the top three reorder (see above). Repeat the ranking
+   comparison on full `commonlid`, add bootstrap confidence intervals, and
+   consider making it a reusable function or leaderboard toggle.
 4. **Get a more independent ensemble.** Rerun with
    `--exclude-model`/`--model` to mix architectures (n-gram, neural, LLM)
    so the agreement signal is less correlated. Tune
